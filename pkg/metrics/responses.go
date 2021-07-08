@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/slack-go/slack"
 )
@@ -43,6 +44,59 @@ func (s *Slack) TeamMembers(teamName string) error {
 
 	}
 	s.cpMembers = cpMemberslist
-	fmt.Println(s.cpMembers)
 	return nil
+}
+
+// Get the list of channels and get the channel ID for the expected channelName
+func (s *Slack) GetChannelID(channelName string) (string, error) {
+
+	var allChannels []slack.Channel
+	var channelID string
+
+	// Initial request
+	initChans, initCur, err := s.client.GetConversations(
+		&slack.GetConversationsParameters{
+			ExcludeArchived: true,
+			Limit:           1000,
+			Types: []string{
+				"public_channel",
+			},
+		},
+	)
+	if err != nil {
+		log.Fatalln("Unexpected Error:", err)
+		return "", err
+	}
+
+	allChannels = append(allChannels, initChans...)
+
+	// Paginate over additional channels
+	nextCur := initCur
+	for nextCur != "" {
+		channels, cursor, err := s.client.GetConversations(
+			&slack.GetConversationsParameters{
+				Cursor:          nextCur,
+				ExcludeArchived: true,
+				Limit:           1000,
+				Types: []string{
+					"public_channel",
+				},
+			},
+		)
+		if err != nil {
+			log.Fatalln("Unexpected Error:", err)
+			return "", err
+		}
+
+		allChannels = append(allChannels, channels...)
+		nextCur = cursor
+	}
+
+	for _, channel := range allChannels {
+		if channel.Name == channelName {
+			channelID = channel.ID
+			break
+		}
+	}
+	return channelID, nil
 }
