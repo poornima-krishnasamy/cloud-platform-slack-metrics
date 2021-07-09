@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -22,19 +23,35 @@ func NewSlack(token string) *CPSlack {
 // Get the list of users of cloud-platform-team group.
 // This will be used to find the first reply from the cloud platform team
 
-func (cpslack *CPSlack) TeamMembers(teamName string) error {
+func (cpslack *CPSlack) SetMembersForTeam(teamName string) error {
 
-	var cpMemberslist []string
+	userGroups, err := cpslack.getUserGroups()
+	if err != nil {
+		return err
+	}
+	err = cpslack.setcpMembers(userGroups, teamName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cpslack *CPSlack) getUserGroups() ([]slack.UserGroup, error) {
 
 	userGroups, err := cpslack.client.GetUserGroups(slack.GetUserGroupsOptionIncludeUsers(true))
 	if err != nil {
 		fmt.Printf("Unexpected error: %s", err)
-		return err
+		return []slack.UserGroup{}, err
 	}
 
+	return userGroups, nil
+}
+
+func (cpslack *CPSlack) setcpMembers(userGroups []slack.UserGroup, teamName string) error {
+
+	var cpMemberslist []string
 	if len(userGroups) < 1 {
-		fmt.Printf("No usergroups available")
-		return err
+		return errors.New("No usergroups available")
 	}
 
 	for _, group := range userGroups {
@@ -48,11 +65,24 @@ func (cpslack *CPSlack) TeamMembers(teamName string) error {
 	return nil
 }
 
+func (cpslack *CPSlack) GetChannelIDByName(channelName string) (string, error) {
+
+	allChannels, err := cpslack.getChannels()
+	if err != nil {
+		return "", err
+	}
+
+	channelID, err := cpslack.getChannelID(allChannels, channelName)
+	if err != nil || channelID == "" {
+		return "", err
+	}
+	return channelID, nil
+}
+
 // Get the list of channels and get the channel ID for the expected channelName
-func (cpslack *CPSlack) GetChannelID(channelName string) (string, error) {
+func (cpslack *CPSlack) getChannels() ([]slack.Channel, error) {
 
 	var allChannels []slack.Channel
-	var channelID string
 
 	// Initial request
 	initChans, initCur, err := cpslack.client.GetConversations(
@@ -66,7 +96,7 @@ func (cpslack *CPSlack) GetChannelID(channelName string) (string, error) {
 	)
 	if err != nil {
 		log.Fatalln("Unexpected Error:", err)
-		return "", err
+		return []slack.Channel{}, err
 	}
 
 	allChannels = append(allChannels, initChans...)
@@ -86,13 +116,23 @@ func (cpslack *CPSlack) GetChannelID(channelName string) (string, error) {
 		)
 		if err != nil {
 			log.Fatalln("Unexpected Error:", err)
-			return "", err
+			return []slack.Channel{}, err
 		}
 
 		allChannels = append(allChannels, channels...)
 		nextCur = cursor
 	}
+	return allChannels, nil
 
+}
+
+func (cpslack *CPSlack) getChannelID(allChannels []slack.Channel, channelName string) (string, error) {
+
+	var channelID string
+
+	if len(allChannels) < 1 {
+		return "", errors.New("No slack channels available")
+	}
 	for _, channel := range allChannels {
 		if channel.Name == channelName {
 			channelID = channel.ID

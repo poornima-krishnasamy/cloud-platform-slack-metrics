@@ -24,14 +24,14 @@ func main() {
 
 	cpslack := metrics.NewSlack(*botToken)
 
-	err := cpslack.TeamMembers(*teamName)
+	err := cpslack.SetMembersForTeam(*teamName)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	channelID, err := cpslack.GetChannelID(*channelName)
-	if err != nil || channelID == "" {
+	channelID, err := cpslack.GetChannelIDByName(*channelName)
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
